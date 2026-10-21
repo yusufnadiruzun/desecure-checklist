@@ -101,8 +101,8 @@ def init_seed():
         if not db.scalar(select(User.id).limit(1)):
             uname=os.getenv('ADMIN_USERNAME','admin')
             pwd=os.getenv('ADMIN_PASSWORD','')
-            if len(pwd)<12:
-                raise RuntimeError('Set ADMIN_PASSWORD in backend/.env to at least 12 characters before first run')
+            if len(pwd)<8:
+                raise RuntimeError('Set ADMIN_PASSWORD in backend/.env to at least 8 characters before first run')
             db.add(User(username=uname, full_name='Sistem Yöneticisi', password_hash=password_hash.hash(pwd), role='admin'))
         if not db.get(Setting,'show_completer'):
             db.add(Setting(key='show_completer',value='true'))
@@ -116,7 +116,7 @@ class Login(BaseModel):
 class UserCreate(BaseModel):
     username: str = Field(min_length=3,max_length=80)
     full_name: str = Field(min_length=2,max_length=150)
-    password: str = Field(min_length=12)
+    password: str = Field(min_length=8)
     role: str = 'staff'
 class ProjectCreate(BaseModel):
     code: str = Field(min_length=1,max_length=80)
@@ -188,6 +188,30 @@ def create_user(data:UserCreate,db:Session=Depends(db_session),u:User=Depends(ad
     if db.scalar(select(User).where(User.username==data.username)):raise HTTPException(409,'Kullanıcı adı kullanılıyor')
     v=User(username=data.username,full_name=data.full_name,role=data.role,password_hash=password_hash.hash(data.password))
     db.add(v);db.flush();log(db,u,'create','user',v.id);db.commit();return user_view(v)
+
+class UserStatusUpdate(BaseModel):
+    active: bool
+
+@app.patch('/users/{user_id}/status', dependencies=[Depends(require_csrf)])
+def change_user_status(user_id: int, data: UserStatusUpdate, db: Session = Depends(db_session), actor: User = Depends(admin)):
+    target = db.get(User, user_id)
+    if target is None:
+        raise HTTPException(404, 'Kullanıcı bulunamadı')
+    if not data.active and target.id == actor.id:
+        raise HTTPException(400, 'Kendi hesabınızı pasife alamazsınız')
+    if not data.active and target.role == 'admin':
+        active_admin_count = db.scalar(select(func.count()).select_from(User).where(User.role == 'admin', User.active.is_(True))) or 0
+        if target.active and active_admin_count <= 1:
+            raise HTTPException(400, 'Son aktif yönetici pasife alınamaz')
+    old_status = target.active
+    if old_status == data.active:
+        return user_view(target)
+    target.active = data.active
+    log(db, actor, 'activate' if data.active else 'deactivate', 'user', target.id,
+        f'username={target.username}; old_active={old_status}; new_active={data.active}')
+    db.commit()
+    db.refresh(target)
+    return user_view(target)
 
 @app.get('/settings')
 def get_settings(db:Session=Depends(db_session),u:User=Depends(current_user)):
