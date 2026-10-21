@@ -127,6 +127,10 @@ class ItemCreate(BaseModel):
     section_id: int
     title: str = Field(min_length=2,max_length=500)
     parent_id: Optional[int] = None
+class ItemUpdate(BaseModel):
+    title: str = Field(min_length=2,max_length=500)
+    parent_id: Optional[int] = None
+
 class Mark(BaseModel):
     done: bool
 class SettingsUpdate(BaseModel):
@@ -211,20 +215,28 @@ def delete_section(section_id:int,db:Session=Depends(db_session),u:User=Depends(
     section=db.get(Section,section_id)
     if section is None:
         raise HTTPException(404,'Checklist başlığı bulunamadı')
-    # Template items may reference other items: remove descendants before parents.
+    # PostgreSQL foreign keys require deleting child items BEFORE the parent section.
+    # Flush each descendant level, since simply db.delete() does not guarantee SQL order.
     items=db.scalars(select(TemplateItem).where(TemplateItem.section_id==section_id)).all()
     remaining={item.id:item for item in items}
-    while remaining:
-        leaves=[item for item in remaining.values() if not any(other.parent_id==item.id for other in remaining.values())]
-        if not leaves:
-            raise HTTPException(409,'Alt madde ilişkileri nedeniyle başlık silinemedi')
-        for item in leaves:
-            db.delete(item)
-            del remaining[item.id]
     title=section.title
-    db.delete(section)
-    log(db,u,'delete','section',section_id,f'title={title}; deleted_items={len(items)}')
-    db.commit()
+    try:
+        while remaining:
+            parent_ids={item.parent_id for item in remaining.values() if item.parent_id is not None}
+            leaves=[item for item in remaining.values() if item.id not in parent_ids]
+            if not leaves:
+                raise HTTPException(409,'Alt madde ilişkilerinde döngü tespit edildi; silme iptal edildi')
+            for item in leaves:
+                db.delete(item)
+                del remaining[item.id]
+            db.flush()  # enforce child-first DELETE statements before the next layer
+        db.delete(section)
+        db.flush()
+        log(db,u,'delete','section',section_id,f'title={title}; deleted_items={len(items)}')
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return {'ok':True,'deleted_section_id':section_id,'deleted_item_count':len(items)}
 
 @app.post('/template/items',dependencies=[Depends(require_csrf)])
@@ -235,6 +247,36 @@ def add_item(data:ItemCreate,db:Session=Depends(db_session),u:User=Depends(admin
         if not parent or parent.section_id!=data.section_id:raise HTTPException(400,'Alt madde aynı başlık altında olmalı')
     item=TemplateItem(section_id=data.section_id,title=data.title,parent_id=data.parent_id,position=db.scalar(select(func.count()).select_from(TemplateItem).where(TemplateItem.section_id==data.section_id)) or 0)
     db.add(item);db.flush();log(db,u,'create','template_item',item.id);db.commit();return {'id':item.id,'title':item.title}
+
+@app.patch('/template/items/{item_id}',dependencies=[Depends(require_csrf)])
+def update_template_item(item_id:int,data:ItemUpdate,db:Session=Depends(db_session),u:User=Depends(admin)):
+    item=db.get(TemplateItem,item_id)
+    if item is None:
+        raise HTTPException(404,'Kontrol maddesi bulunamadı')
+    title=data.title.strip()
+    if len(title)<2:
+        raise HTTPException(422,'Madde adı en az 2 karakter olmalı')
+    if data.parent_id is not None:
+        if data.parent_id==item.id:
+            raise HTTPException(400,'Bir madde kendi alt maddesi olamaz')
+        parent=db.get(TemplateItem,data.parent_id)
+        if not parent or parent.section_id!=item.section_id:
+            raise HTTPException(400,'Üst madde aynı başlık altında olmalı')
+        # Prevent cycles, including selecting any descendant of this item.
+        ancestor=parent
+        visited=set()
+        while ancestor is not None:
+            if ancestor.id==item.id or ancestor.id in visited:
+                raise HTTPException(400,'Döngü oluşturan üst madde seçilemez')
+            visited.add(ancestor.id)
+            ancestor=db.get(TemplateItem,ancestor.parent_id) if ancestor.parent_id else None
+    old_title,old_parent=item.title,item.parent_id
+    item.title=title
+    item.parent_id=data.parent_id
+    log(db,u,'update','template_item',item.id,
+        f'old_title={old_title}; new_title={title}; old_parent_id={old_parent}; new_parent_id={data.parent_id}')
+    db.commit()
+    return {'id':item.id,'title':item.title,'parent_id':item.parent_id}
 
 @app.get('/projects')
 def projects(db:Session=Depends(db_session),u:User=Depends(current_user)):

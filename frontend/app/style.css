@@ -69,3 +69,10 @@ a{color:var(--accent)}
 .delete-section-warning strong{display:block;margin-bottom:8px}
 .delete-section-warning p{font-size:13px;margin:8px 0 0}
 @media(max-width:560px){.section-heading{flex-wrap:wrap}.section-controls{width:100%;justify-content:flex-end}}
+
+/* V0.6 - Şablon madde düzenleme */
+.template-item-text{flex:1;min-width:0;overflow-wrap:anywhere}
+.template-edit-button{margin-left:auto;flex-shrink:0;background:#f9edef;border:1px solid #f0ced4;color:#831729;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:650;cursor:pointer}
+.template-edit-button:hover{background:#f2dce1}
+.template-edit-button:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:560px){.template-row{gap:8px}.template-edit-button{padding:6px 8px}}
