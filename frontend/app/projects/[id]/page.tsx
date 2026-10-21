@@ -60,6 +60,18 @@ export default function ProjectDetail({params}:{params:Promise<{id:string}>}){
       {error&&<div role="alert" className="alert error">{error}<button onClick={()=>setError('')} aria-label="Hatayı kapat">×</button></div>}
       {loading?<div className="check-loading">Checklist yükleniyor...</div>:!data?<div className="check-empty"><h2>Proje yüklenemedi</h2><p>Bağlantıyı kontrol edip tekrar deneyin.</p><button className="btn secondary" onClick={()=>void refresh()}>Tekrar dene</button></div>:<>
         <div className="paper-header"><div className="print-brand"><CompanyBrand/></div><h2>PROJE KONTROL FORMU</h2><p>{data.project.code} · {data.project.name}</p></div>
+        <div className="compact-print-only">
+          <table className="compact-print-table">
+            <colgroup><col className="cp-no"/><col className="cp-section"/><col className="cp-criterion"/><col className="cp-status"/><col className="cp-person"/><col className="cp-sign"/></colgroup>
+            <thead><tr><th>No</th><th>Kontrol Başlığı</th><th>Yapılacak İşlem / Kabul Kriteri</th><th>Durum</th><th>Yapan / Tarih</th><th>İmza</th></tr></thead>
+            <tbody>{items.map((item,index)=><tr key={item.id}>
+              <td>{index+1}</td><td>{item.section_title}</td><td className={item.parent_id?'cp-child':''}>{item.title}</td>
+              <td>{item.done?'☑ Tamam':'☐ Bekliyor'}</td>
+              <td>{item.done_by||'—'}{item.done_at&&<span className="cp-date">{formattedDate(item.done_at)}</span>}</td>
+              <td className="cp-sign-line">&nbsp;</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
         <header className="check-hero">
           <div className="check-heading"><div className="check-kicker"><span className="check-kicker-dot"/> PROJE KONTROL LİSTESİ</div><h1>{data.project.name}</h1><div className="check-project-code"><span>Proje kodu</span><strong>{data.project.code}</strong></div></div>
           <div className="check-summary"><div className="check-progress-ring" style={{'--progress':`${percent}%`} as React.CSSProperties}><div><strong>{percent}%</strong><small>tamamlandı</small></div></div><div className="check-summary-stats"><strong>{doneCount} <span>/ {items.length}</span></strong><small>Toplam tamamlanan madde</small><div className="check-mini-track"><span style={{width:`${percent}%`}}/></div></div></div>

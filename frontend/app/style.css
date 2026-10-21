@@ -90,3 +90,31 @@ a{color:var(--accent)}
 .user-status.is-inactive{color:#9f1239;background:#ffe4e6}
 .user-enable-button{background:#a41e34;color:#fff}
 @media(max-width:640px){.user-row{flex-wrap:wrap}.user-row-info{flex-basis:calc(100% - 55px)}.user-row .btn{margin-left:auto}}
+
+/* V0.8: PDF v.02 benzeri yoğun, tablolı çıktı. Ekran görünümü değişmez. */
+.compact-print-only{display:none}
+@page{size:A4 portrait;margin:9mm 8mm}
+@media print{
+  html,body{margin:0!important;padding:0!important;background:#fff!important;color:#111!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .check-container{width:100%!important;max-width:none!important;padding:0!important;margin:0!important}
+  .check-hero,.check-stats,.check-section-list,.check-list-heading,.check-footer,.check-topbar,.check-print-footer,.check-empty{display:none!important}
+  .paper-header{display:block!important;text-align:center!important;margin:0 0 5mm!important;padding:0!important;border:0!important}
+  .print-brand{justify-content:center!important;margin-bottom:2mm!important}
+  .paper-header h2{font-size:11pt!important;margin:1mm 0!important;font-weight:800!important}
+  .paper-header p{font-size:8pt!important;margin:0 0 2mm!important}
+  .compact-print-only{display:block!important}
+  .compact-print-table{border-collapse:collapse!important;border-spacing:0!important;table-layout:fixed!important;width:100%!important;font-family:Arial,sans-serif!important;font-size:7.2pt!important;line-height:1.13!important;color:#111!important}
+  .compact-print-table col.cp-no{width:4.5%}
+  .compact-print-table col.cp-section{width:19%}
+  .compact-print-table col.cp-criterion{width:43%}
+  .compact-print-table col.cp-status{width:10.5%}
+  .compact-print-table col.cp-person{width:15%}
+  .compact-print-table col.cp-sign{width:8%}
+  .compact-print-table th,.compact-print-table td{border:0.5pt solid #555!important;text-align:left!important;vertical-align:top!important;padding:2px 3px!important;word-break:normal!important;overflow-wrap:anywhere!important;white-space:normal!important}
+  .compact-print-table th{font-size:7pt!important;font-weight:750!important;background:#f1f1f1!important}
+  .compact-print-table thead{display:table-header-group!important}
+  .compact-print-table tr{break-inside:avoid!important;page-break-inside:avoid!important}
+  .compact-print-table .cp-child{padding-left:8px!important}
+  .compact-print-table .cp-date{display:block!important;font-size:6.5pt!important;margin-top:1px!important}
+  .compact-print-table .cp-sign-line{height:17px}
+}
