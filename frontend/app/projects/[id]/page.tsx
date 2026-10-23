@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {api} from '../../../lib/api';
 import CompanyBrand from '../../components/CompanyBrand';
 
-type Item = {id:number; title:string; section_title:string; section_order:number; parent_id:number|null; done:boolean; done_by:string|null; done_at:string|null};
+type Item = {id:number; title:string; section_title:string; section_order:number; parent_id:number|null; done:boolean; can_unmark:boolean; done_by:string|null; done_at:string|null};
 type Data = {project:{name:string;code:string}; items:Item[]; show_completer:boolean};
 type Filter = 'all'|'pending'|'done';
 
@@ -23,6 +23,7 @@ export default function ProjectDetail({params}:{params:Promise<{id:string}>}){
   const [filter,setFilter]=useState<Filter>('all');
   const [collapsed,setCollapsed]=useState<string[]>([]);
   const [loading,setLoading]=useState(true);
+  const [commentItem,setCommentItem]=useState<number|null>(null);
 
   const refresh=useCallback(async()=>{
     try{setData(await api(`/projects/${id}`));setError('')}
@@ -33,6 +34,7 @@ export default function ProjectDetail({params}:{params:Promise<{id:string}>}){
 
   async function mark(item:Item){
     if(busy!==null)return;
+    if(item.done && !item.can_unmark)return;
     setBusy(item.id);setError('');
     try{
       await api(`/projects/${id}/items/${item.id}`,{method:'PATCH',body:JSON.stringify({done:!item.done})});
@@ -88,8 +90,15 @@ export default function ProjectDetail({params}:{params:Promise<{id:string}>}){
               <div className="check-section-head"><span className="check-section-index">{String(index+1).padStart(2,'0')}</span><div className="check-section-title"><h2>{section}</h2><span>{sectionDone} / {sectionItems.length} tamamlandı</span></div><div className="check-section-progress no-print"><div><span style={{width:`${sectionItems.length?sectionDone/sectionItems.length*100:0}%`}}/></div></div><button className="check-collapse no-print" type="button" aria-expanded={!isCollapsed} aria-label={`${section} bölümünü ${isCollapsed?'aç':'daralt'}`} onClick={()=>setCollapsed(a=>isCollapsed?a.filter(x=>x!==section):[...a,section])}>{isCollapsed?'⌄':'⌃'}</button></div>
               <div className={`check-section-body ${isCollapsed?'check-section-collapsed':''}`}>
                 {!shown.length?<div className="check-filter-empty no-print">Bu filtreye uygun madde bulunmuyor.</div>:sectionItems.map(item=><div className={`check-item ${!visible(item)?'check-item-filtered ':''}${item.done?'is-done':''} ${item.parent_id?'is-child':''}`} key={item.id}>
-                  <label className="check-item-main"><input type="checkbox" disabled={busy!==null} checked={item.done} onChange={()=>void mark(item)} aria-label={`${item.title} — ${item.done?'tamamlandı':'bekliyor'}`}/><span className="check-box" aria-hidden>{item.done?'✓':''}</span><span className="check-item-title">{item.title}</span></label>
+                  <label className="check-item-main"><input type="checkbox" disabled={busy!==null || (item.done && !item.can_unmark)} checked={item.done} onChange={()=>void mark(item)} aria-label={`${item.title} — ${item.done?'tamamlandı':'bekliyor'}`}/><span className="check-box" aria-hidden>{item.done?'✓':''}</span><span className="check-item-title">{item.title}</span></label>
                   <div className="check-item-meta"><span className={`check-status ${item.done?'finished':'waiting'}`}><span className="check-status-dot"/>{item.done?'Tamamlandı':'Bekliyor'}</span>{item.done&&data.show_completer&&item.done_by&&<div className="check-person"><span className="check-person-avatar">{item.done_by.charAt(0).toLocaleUpperCase('tr-TR')}</span><span className="check-person-details"><strong>{item.done_by}</strong>{item.done_at&&<small>{formattedDate(item.done_at)}</small>}</span></div>}{item.done&&!data.show_completer&&<span className="check-hidden-person no-print">Personel gizli</span>}</div>
+                  <div className="no-print" style={{marginTop:8,gridColumn:'1 / -1'}}>
+                    <button type="button" className="comment-toggle" onClick={()=>setCommentItem(commentItem===item.id?null:item.id)}>
+                      {commentItem===item.id?'Yorumları gizle':'Yorumlar / Yorum ekle'}
+                    </button>
+                    {commentItem===item.id && <ItemComments projectId={id} itemId={item.id}/>}
+                    {item.done && !item.can_unmark && <small style={{display:'block',color:'#7b6670',marginTop:6}}>Bu işareti yalnızca tamamlayan kişi veya yönetici kaldırabilir.</small>}
+                  </div>
                   <div className="check-print-by">{item.done_by||'—'}{item.done_at&&<small>{formattedDate(item.done_at)}</small>}</div><div className="check-signature"/>
                 </div>)}
               </div>
@@ -101,4 +110,47 @@ export default function ProjectDetail({params}:{params:Promise<{id:string}>}){
       </>}
     </div>
   </main>;
+}
+
+
+type Comment = {id:number;body:string;author:string;author_id:number;created_at:string;updated_at:string|null;can_edit:boolean;can_delete:boolean};
+function ItemComments({projectId,itemId}:{projectId:string;itemId:number}){
+  const [comments,setComments]=useState<Comment[]>([]);
+  const [text,setText]=useState('');
+  const [editing,setEditing]=useState<number|null>(null);
+  const [editText,setEditText]=useState('');
+  const [error,setError]=useState('');
+  const [working,setWorking]=useState(false);
+  const load=useCallback(async()=>{
+    try{setComments(await api(`/projects/${projectId}/items/${itemId}/comments`));setError('')}
+    catch(e){setError((e as Error).message)}
+  },[projectId,itemId]);
+  useEffect(()=>{void load()},[load]);
+  async function create(){
+    if(!text.trim()||working)return;
+    setWorking(true);
+    try{await api(`/projects/${projectId}/items/${itemId}/comments`,{method:'POST',body:JSON.stringify({body:text.trim()})});setText('');await load()}
+    catch(e){setError((e as Error).message)}finally{setWorking(false)}
+  }
+  async function save(commentId:number){
+    if(!editText.trim()||working)return;
+    setWorking(true);
+    try{await api(`/projects/${projectId}/items/${itemId}/comments/${commentId}`,{method:'PATCH',body:JSON.stringify({body:editText.trim()})});setEditing(null);await load()}
+    catch(e){setError((e as Error).message)}finally{setWorking(false)}
+  }
+  async function remove(commentId:number){
+    if(working||!window.confirm('Kendi yorumun silinsin mi? İşlem audit logda saklanacaktır.'))return;
+    setWorking(true);
+    try{await api(`/projects/${projectId}/items/${itemId}/comments/${commentId}`,{method:'DELETE'});await load()}
+    catch(e){setError((e as Error).message)}finally{setWorking(false)}
+  }
+  return <div className="item-comments">
+    {error&&<p role="alert" style={{color:'#a41e34'}}>{error}</p>}
+    {comments.length===0?<p className="item-comments-empty">Henüz yorum yok.</p>:comments.map(c=><div className="item-comment" key={c.id}>
+      <div className="item-comment-meta"><strong>{c.author}</strong><time>{formattedDate(c.created_at)}</time>{c.updated_at&&<em> · düzenlendi: {formattedDate(c.updated_at)}</em>}</div>
+      {editing===c.id?<><textarea value={editText} onChange={e=>setEditText(e.target.value)} maxLength={3000} rows={3}/><div className="item-comment-actions"><button disabled={working} onClick={()=>void save(c.id)}>Kaydet</button><button onClick={()=>setEditing(null)}>Vazgeç</button></div></>:<><p>{c.body}</p>{c.can_edit&&<div className="item-comment-actions"><button onClick={()=>{setEditing(c.id);setEditText(c.body)}}>Düzenle</button><button disabled={working} onClick={()=>void remove(c.id)}>Sil</button></div>}</>}
+    </div>)}
+    <textarea value={text} onChange={e=>setText(e.target.value)} maxLength={3000} rows={2} placeholder="Bu madde için yorum yaz..." aria-label="Yeni yorum"/>
+    <button type="button" className="comment-submit" disabled={working||!text.trim()} onClick={()=>void create()}>Yorum ekle</button>
+  </div>;
 }

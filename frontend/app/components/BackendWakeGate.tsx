@@ -19,7 +19,7 @@ export default function BackendWakeGate({ children }: { children: ReactNode }) {
 
     const check = async () => {
       activeController = new AbortController();
-      const timeout = setTimeout(() => activeController?.abort(), 12000);
+      const timeout = setTimeout(() => activeController?.abort(), 105000);
       let httpCode: number | null = null;
       try {
         const response = await fetch('/api/health', {
