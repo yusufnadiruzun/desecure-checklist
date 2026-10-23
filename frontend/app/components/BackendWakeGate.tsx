@@ -73,7 +73,7 @@ export default function BackendWakeGate({ children }: { children: ReactNode }) {
         <p>
           {hasConfigError
             ? 'API adresi bulunamadı (404). Render frontend servisindeki API_PROXY_TARGET ayarını ve /api yönlendirmesini kontrol edin.'
-            : 'Sunucu uyku modundan çıkıyor. Bağlantı hazır olduğunda uygulama otomatik açılacak.'}
+            : 'Sunucu uyku modundan çıkıyor. Bu işlem yaklaşık 1 dakika sürebilir. Bağlantı hazır olduğunda uygulama otomatik açılacak.'}
         </p>
         {attempts > 0 && <span className="backend-wake-status">Bağlantı denemesi: {attempts + 1}{hasConfigError ? '' : ' · Otomatik yeniden deneniyor'}</span>}
         <button type="button" className="backend-wake-retry" onClick={() => { setStatus('checking'); setAttempts(0); setLastHttpStatus(null); setRetryKey(x => x + 1); }}>
