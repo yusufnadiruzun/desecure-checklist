@@ -8,7 +8,7 @@ from fastapi import FastAPI, Depends, HTTPException, Response, Cookie, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from pwdlib import PasswordHash
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, create_engine, select, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, create_engine, select, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, Session, sessionmaker
 
 load_dotenv()
@@ -67,6 +67,17 @@ class ProjectItem(Base):
     done_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey('users.id'), nullable=True)
     done_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     done_by: Mapped[Optional[User]] = relationship(foreign_keys=[done_by_id])
+
+class ItemComment(Base):
+    __tablename__ = 'item_comments'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_item_id: Mapped[int] = mapped_column(ForeignKey('project_items.id'), index=True)
+    author_id: Mapped[int] = mapped_column(ForeignKey('users.id'), index=True)
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    author: Mapped[User] = relationship(foreign_keys=[author_id])
 
 class Setting(Base):
     __tablename__='settings'
@@ -133,6 +144,12 @@ class ItemUpdate(BaseModel):
 
 class Mark(BaseModel):
     done: bool
+class CommentCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=3000)
+
+class CommentUpdate(BaseModel):
+    body: str = Field(min_length=1, max_length=3000)
+
 class SettingsUpdate(BaseModel):
     show_completer: bool
 
@@ -329,20 +346,87 @@ def project_detail(project_id:int,db:Session=Depends(db_session),u:User=Depends(
     if not p or p.archived:raise HTTPException(404,'Proje bulunamadı')
     items=db.scalars(select(ProjectItem).where(ProjectItem.project_id==project_id).order_by(ProjectItem.section_order,ProjectItem.position,ProjectItem.id)).all()
     show=db.get(Setting,'show_completer').value=='true' or u.role=='admin'
-    return {'project':{'id':p.id,'code':p.code,'name':p.name},'show_completer':show,'items':[{'id':v.id,'title':v.title,'section_title':v.section_title,'section_order':v.section_order,'parent_id':v.parent_id,'done':v.done,'done_by':v.done_by.full_name if v.done_by and show else None,'done_at':v.done_at.isoformat() if v.done_at else None} for v in items]}
+    return {'project':{'id':p.id,'code':p.code,'name':p.name},'show_completer':show,'items':[{'id':v.id,'title':v.title,'section_title':v.section_title,'section_order':v.section_order,'parent_id':v.parent_id,'done':v.done,'done_by_id':v.done_by_id if (show or u.id == v.done_by_id) else None,'can_unmark':bool(v.done and (u.role=='admin' or v.done_by_id==u.id)),'done_by':v.done_by.full_name if v.done_by and show else None,'done_at':v.done_at.isoformat() if v.done_at else None} for v in items]}
 
 @app.patch('/projects/{project_id}/items/{item_id}',dependencies=[Depends(require_csrf)])
 def mark_item(project_id:int,item_id:int,data:Mark,db:Session=Depends(db_session),u:User=Depends(current_user)):
-    item=db.get(ProjectItem,item_id)
-    if not item or item.project_id!=project_id:raise HTTPException(404,'Madde bulunamadı')
+    item=db.scalar(select(ProjectItem).where(ProjectItem.id==item_id,ProjectItem.project_id==project_id).with_for_update())
+    if not item:raise HTTPException(404,'Madde bulunamadı')
     if item.done==data.done:return {'ok':True}
-    item.done=data.done;item.done_by_id=u.id if data.done else None;item.done_at=datetime.now(timezone.utc) if data.done else None
-    log(db,u,'mark_done' if data.done else 'unmark','project_item',item.id)
-    db.commit();return {'ok':True}
+    if item.done and not data.done and u.role!='admin' and item.done_by_id!=u.id:
+        raise HTTPException(403,'Bu işareti yalnızca tamamlayan kullanıcı veya yönetici kaldırabilir.')
+    previous_person=item.done_by_id
+    item.done=data.done
+    item.done_by_id=u.id if data.done else None
+    item.done_at=datetime.now(timezone.utc) if data.done else None
+    log(db,u,'mark_done' if data.done else 'unmark','project_item',item.id,
+        f'project_id={project_id}; item={item.title[:320]}; old_done={not data.done}; new_done={data.done}; previous_done_by_id={previous_person}')
+    db.commit()
+    return {'ok':True}
+
+
+def resolve_project_item(db:Session, project_id:int, item_id:int):
+    item=db.get(ProjectItem,item_id)
+    if item is None or item.project_id!=project_id:
+        raise HTTPException(404,'Proje maddesi bulunamadı')
+    return item
+
+
+@app.get('/projects/{project_id}/items/{item_id}/comments')
+def list_comments(project_id:int,item_id:int,db:Session=Depends(db_session),u:User=Depends(current_user)):
+    resolve_project_item(db,project_id,item_id)
+    comments=db.scalars(select(ItemComment).where(ItemComment.project_item_id==item_id,ItemComment.deleted_at.is_(None)).order_by(ItemComment.created_at,ItemComment.id)).all()
+    return [{'id':c.id,'body':c.body,'author':c.author.full_name,'author_id':c.author_id,'created_at':c.created_at.isoformat(),
+             'updated_at':c.updated_at.isoformat() if c.updated_at else None,'can_edit':c.author_id==u.id,'can_delete':c.author_id==u.id} for c in comments]
+
+
+@app.post('/projects/{project_id}/items/{item_id}/comments',dependencies=[Depends(require_csrf)],status_code=201)
+def add_comment(project_id:int,item_id:int,data:CommentCreate,db:Session=Depends(db_session),u:User=Depends(current_user)):
+    resolve_project_item(db,project_id,item_id)
+    body=data.body.strip()
+    if not body:raise HTTPException(422,'Yorum boş olamaz')
+    comment=ItemComment(project_item_id=item_id,author_id=u.id,body=body)
+    db.add(comment);db.flush()
+    log(db,u,'comment_create','item_comment',comment.id,f'project_id={project_id}; item_id={item_id}; body={body[:650]}')
+    db.commit()
+    return {'id':comment.id}
+
+
+@app.patch('/projects/{project_id}/items/{item_id}/comments/{comment_id}',dependencies=[Depends(require_csrf)])
+def edit_comment(project_id:int,item_id:int,comment_id:int,data:CommentUpdate,db:Session=Depends(db_session),u:User=Depends(current_user)):
+    resolve_project_item(db,project_id,item_id)
+    comment=db.get(ItemComment,comment_id)
+    if comment is None or comment.project_item_id!=item_id or comment.deleted_at is not None:raise HTTPException(404,'Yorum bulunamadı')
+    if comment.author_id!=u.id:raise HTTPException(403,'Yalnızca kendi yorumunu düzenleyebilirsin')
+    body=data.body.strip()
+    if not body:raise HTTPException(422,'Yorum boş olamaz')
+    old=comment.body
+    comment.body=body;comment.updated_at=datetime.now(timezone.utc)
+    log(db,u,'comment_update','item_comment',comment.id,f'project_id={project_id}; item_id={item_id}; old={old[:360]}; new={body[:360]}')
+    db.commit()
+    return {'ok':True}
+
+
+@app.delete('/projects/{project_id}/items/{item_id}/comments/{comment_id}',dependencies=[Depends(require_csrf)])
+def delete_comment(project_id:int,item_id:int,comment_id:int,db:Session=Depends(db_session),u:User=Depends(current_user)):
+    resolve_project_item(db,project_id,item_id)
+    comment=db.get(ItemComment,comment_id)
+    if comment is None or comment.project_item_id!=item_id or comment.deleted_at is not None:raise HTTPException(404,'Yorum bulunamadı')
+    if comment.author_id!=u.id:raise HTTPException(403,'Yalnızca kendi yorumunu silebilirsin')
+    comment.deleted_at=datetime.now(timezone.utc)
+    log(db,u,'comment_delete','item_comment',comment.id,f'project_id={project_id}; item_id={item_id}; deleted_body={comment.body[:650]}')
+    db.commit()
+    return {'ok':True}
 
 @app.get('/projects/{project_id}/history')
 def project_history(project_id:int,db:Session=Depends(db_session),u:User=Depends(admin)):
     if not db.get(Project,project_id):raise HTTPException(404,'Proje bulunamadı')
     ids=select(ProjectItem.id).where(ProjectItem.project_id==project_id)
-    events=db.execute(select(Audit,User.full_name).join(User,Audit.actor_id==User.id).where((Audit.target=='project_item') & Audit.target_id.in_(ids)).order_by(Audit.id.desc())).all()
-    return [{'id':a.id,'action':a.action,'item_id':a.target_id,'actor':name,'at':a.created_at.isoformat()} for a,name in events]
+    comment_ids=select(ItemComment.id).where(ItemComment.project_item_id.in_(ids))
+    from sqlalchemy import or_, and_
+    events=db.execute(select(Audit,User.full_name).join(User,Audit.actor_id==User.id).where(or_(
+        and_(Audit.target=='project_item',Audit.target_id.in_(ids)),
+        and_(Audit.target=='item_comment',Audit.target_id.in_(comment_ids))
+    )).order_by(Audit.id.desc())).all()
+    return [{'id':a.id,'action':a.action,'target':a.target,'target_id':a.target_id,
+             'actor':name,'at':a.created_at.isoformat(),'details':a.details} for a,name in events]
