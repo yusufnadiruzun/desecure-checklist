@@ -23,7 +23,6 @@ export default function ProjectDetail({params}:{params:Promise<{id:string}>}){
   const [filter,setFilter]=useState<Filter>('all');
   const [collapsed,setCollapsed]=useState<string[]>([]);
   const [loading,setLoading]=useState(true);
-  const [commentItem,setCommentItem]=useState<number|null>(null);
 
   const refresh=useCallback(async()=>{
     try{setData(await api(`/projects/${id}`));setError('')}
@@ -93,10 +92,7 @@ export default function ProjectDetail({params}:{params:Promise<{id:string}>}){
                   <label className="check-item-main"><input type="checkbox" disabled={busy!==null || (item.done && !item.can_unmark)} checked={item.done} onChange={()=>void mark(item)} aria-label={`${item.title} — ${item.done?'tamamlandı':'bekliyor'}`}/><span className="check-box" aria-hidden>{item.done?'✓':''}</span><span className="check-item-title">{item.title}</span></label>
                   <div className="check-item-meta"><span className={`check-status ${item.done?'finished':'waiting'}`}><span className="check-status-dot"/>{item.done?'Tamamlandı':'Bekliyor'}</span>{item.done&&data.show_completer&&item.done_by&&<div className="check-person"><span className="check-person-avatar">{item.done_by.charAt(0).toLocaleUpperCase('tr-TR')}</span><span className="check-person-details"><strong>{item.done_by}</strong>{item.done_at&&<small>{formattedDate(item.done_at)}</small>}</span></div>}{item.done&&!data.show_completer&&<span className="check-hidden-person no-print">Personel gizli</span>}</div>
                   <div className="no-print" style={{marginTop:8,gridColumn:'1 / -1'}}>
-                    <button type="button" className="comment-toggle" onClick={()=>setCommentItem(commentItem===item.id?null:item.id)}>
-                      {commentItem===item.id?'Yorumları gizle':'Yorumlar / Yorum ekle'}
-                    </button>
-                    {commentItem===item.id && <ItemComments projectId={id} itemId={item.id}/>}
+                    <ItemComments projectId={id} itemId={item.id}/>
                     {item.done && !item.can_unmark && <small style={{display:'block',color:'#7b6670',marginTop:6}}>Bu işareti yalnızca tamamlayan kişi veya yönetici kaldırabilir.</small>}
                   </div>
                   <div className="check-print-by">{item.done_by||'—'}{item.done_at&&<small>{formattedDate(item.done_at)}</small>}</div><div className="check-signature"/>
@@ -123,6 +119,7 @@ function ItemComments({projectId,itemId}:{projectId:string;itemId:number}){
   const [working,setWorking]=useState(false);
   const [loaded,setLoaded]=useState(false);
   const [showAllComments,setShowAllComments]=useState(false);
+  const [showComposer,setShowComposer]=useState(false);
   const visibleComments=useMemo(()=>{
     const sorted=[...comments].sort((a,b)=>b.id-a.id);
     return showAllComments?sorted:sorted.slice(0,2);
@@ -135,7 +132,7 @@ function ItemComments({projectId,itemId}:{projectId:string;itemId:number}){
   async function create(){
     if(!text.trim()||working)return;
     setWorking(true);
-    try{await api(`/projects/${projectId}/items/${itemId}/comments`,{method:'POST',body:JSON.stringify({body:text.trim()})});setText('');await load()}
+    try{await api(`/projects/${projectId}/items/${itemId}/comments`,{method:'POST',body:JSON.stringify({body:text.trim()})});setText('');setShowComposer(false);await load()}
     catch(e){setError((e as Error).message === 'İşlem başarısız' ? 'Yorum kaydedilemedi. Backend servisinde yorum endpointleri bulunamıyor olabilir (404). Backend V1.1 dağıtımını kontrol edin.' : (e as Error).message)}finally{setWorking(false)}
   }
   async function save(commentId:number){
@@ -151,9 +148,9 @@ function ItemComments({projectId,itemId}:{projectId:string;itemId:number}){
     catch(e){setError((e as Error).message === 'İşlem başarısız' ? 'Yorum kaydedilemedi. Backend servisinde yorum endpointleri bulunamıyor olabilir (404). Backend V1.1 dağıtımını kontrol edin.' : (e as Error).message)}finally{setWorking(false)}
   }
   return <div className="item-comments">
+    <div className="item-comments-header" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8}}><strong>Yorumlar</strong>{loaded && <span className="item-comments-count">{comments.length} yorum</span>}</div>
     {error&&<p role="alert" style={{color:'#a41e34'}}>{error}</p>}
     {loaded && comments.length===0 && <p className="item-comments-empty">Henüz yorum yok.</p>}
-    {loaded && comments.length>0 && <p className="item-comments-count">{comments.length} yorum · En son eklenenler üstte</p>}
     {loaded && visibleComments.map(c=><div className="item-comment" key={c.id}>
       <div className="item-comment-meta"><strong>{c.author}</strong><time>{formattedDate(c.created_at)}</time>{c.updated_at&&<em> · düzenlendi: {formattedDate(c.updated_at)}</em>}</div>
       {editing===c.id?<><textarea value={editText} onChange={e=>setEditText(e.target.value)} maxLength={3000} rows={3}/><div className="item-comment-actions"><button disabled={working} onClick={()=>void save(c.id)}>Kaydet</button><button onClick={()=>setEditing(null)}>Vazgeç</button></div></>:<><p>{c.body}</p>{c.can_edit&&<div className="item-comment-actions"><button onClick={()=>{setEditing(c.id);setEditText(c.body)}}>Düzenle</button><button disabled={working} onClick={()=>void remove(c.id)}>Sil</button></div>}</>}
@@ -161,7 +158,12 @@ function ItemComments({projectId,itemId}:{projectId:string;itemId:number}){
     {loaded && comments.length>2 && <button type="button" className="comment-show-more" onClick={()=>setShowAllComments(v=>!v)} aria-expanded={showAllComments}>
       {showAllComments?'Yalnızca son 2 yorumu göster':`Diğer ${comments.length-2} yorumu göster`}
     </button>}
-    <textarea value={text} onChange={e=>setText(e.target.value)} maxLength={3000} rows={2} placeholder="Bu madde için yorum yaz..." aria-label="Yeni yorum"/>
-    <button type="button" className="comment-submit" disabled={working||!text.trim()} onClick={()=>void create()}>Yorum ekle</button>
+    <button type="button" className="comment-toggle" onClick={()=>setShowComposer(v=>!v)} aria-expanded={showComposer}>
+      {showComposer?'Yorum yazmayı kapat':'+ Yorum ekle'}
+    </button>
+    {showComposer && <div className="item-comment-composer">
+      <textarea value={text} onChange={e=>setText(e.target.value)} maxLength={3000} rows={2} placeholder="Bu madde için yorum yaz..." aria-label="Yeni yorum"/>
+      <button type="button" className="comment-submit" disabled={working||!text.trim()} onClick={()=>void create()}>Yorumu kaydet</button>
+    </div>}
   </div>;
 }
