@@ -4,6 +4,7 @@ import {use, useCallback, useEffect, useMemo, useState} from 'react';
 import Link from 'next/link';
 import {api} from '../../../lib/api';
 import CompanyBrand from '../../components/CompanyBrand';
+import './comments.css';
 
 type Item = {id:number; title:string; section_title:string; section_order:number; parent_id:number|null; done:boolean; can_unmark:boolean; done_by:string|null; done_at:string|null};
 type Data = {project:{name:string;code:string}; items:Item[]; show_completer:boolean};
@@ -147,23 +148,37 @@ function ItemComments({projectId,itemId}:{projectId:string;itemId:number}){
     try{await api(`/projects/${projectId}/items/${itemId}/comments/${commentId}`,{method:'DELETE'});await load()}
     catch(e){setError((e as Error).message === 'İşlem başarısız' ? 'Yorum kaydedilemedi. Backend servisinde yorum endpointleri bulunamıyor olabilir (404). Backend V1.1 dağıtımını kontrol edin.' : (e as Error).message)}finally{setWorking(false)}
   }
-  return <div className="item-comments">
-    <div className="item-comments-header" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:8}}><strong>Yorumlar</strong>{loaded && <span className="item-comments-count">{comments.length} yorum</span>}</div>
-    {error&&<p role="alert" style={{color:'#a41e34'}}>{error}</p>}
-    {loaded && comments.length===0 && <p className="item-comments-empty">Henüz yorum yok.</p>}
-    {loaded && visibleComments.map(c=><div className="item-comment" key={c.id}>
-      <div className="item-comment-meta"><strong>{c.author}</strong><time>{formattedDate(c.created_at)}</time>{c.updated_at&&<em> · düzenlendi: {formattedDate(c.updated_at)}</em>}</div>
-      {editing===c.id?<><textarea value={editText} onChange={e=>setEditText(e.target.value)} maxLength={3000} rows={3}/><div className="item-comment-actions"><button disabled={working} onClick={()=>void save(c.id)}>Kaydet</button><button onClick={()=>setEditing(null)}>Vazgeç</button></div></>:<><p>{c.body}</p>{c.can_edit&&<div className="item-comment-actions"><button onClick={()=>{setEditing(c.id);setEditText(c.body)}}>Düzenle</button><button disabled={working} onClick={()=>void remove(c.id)}>Sil</button></div>}</>}
-    </div>)}
-    {loaded && comments.length>2 && <button type="button" className="comment-show-more" onClick={()=>setShowAllComments(v=>!v)} aria-expanded={showAllComments}>
-      {showAllComments?'Yalnızca son 2 yorumu göster':`Diğer ${comments.length-2} yorumu göster`}
+  return <section className="item-comments" aria-label="Madde yorumları">
+    <div className="item-comments-header">
+      <div className="item-comments-heading"><span className="comment-heading-symbol" aria-hidden="true">☏</span><strong>Yorumlar</strong>{loaded&&<span className="item-comments-count">{comments.length}</span>}</div>
+      <button type="button" className="comment-add-top" onClick={()=>setShowComposer(v=>!v)} aria-expanded={showComposer}>
+        <span aria-hidden="true">＋</span> {showComposer?'Vazgeç':'Yorum yaz'}
+      </button>
+    </div>
+    {error&&<p className="comment-feedback-error" role="alert">{error}</p>}
+    {!loaded&&!error&&<p className="item-comments-empty">Yorumlar yükleniyor...</p>}
+    {loaded&&comments.length===0&&<p className="item-comments-empty">Henüz yorum eklenmemiş.</p>}
+    {loaded&&visibleComments.map(c=><article className="item-comment" key={c.id}>
+      <span className="comment-avatar" aria-hidden="true">{c.author?.trim().charAt(0).toLocaleUpperCase('tr-TR')||'?'}</span>
+      <div className="comment-content">
+        <div className="item-comment-meta"><strong>{c.author}</strong><time dateTime={c.created_at}>{formattedDate(c.created_at)}</time></div>
+        {c.updated_at&&<span className="comment-edited">Düzenlendi · {formattedDate(c.updated_at)}</span>}
+        {editing===c.id?<div className="comment-edit-pane">
+          <textarea value={editText} onChange={e=>setEditText(e.target.value)} maxLength={3000} rows={3} aria-label="Yorumu düzenle"/>
+          <div className="item-comment-actions"><button className="comment-save" disabled={working||!editText.trim()} onClick={()=>void save(c.id)}>Kaydet</button><button className="comment-cancel" type="button" onClick={()=>setEditing(null)}>Vazgeç</button></div>
+        </div>:<><p className="comment-body">{c.body}</p>{(c.can_edit||c.can_delete)&&<div className="item-comment-actions">
+          {c.can_edit&&<button type="button" className="comment-action-edit" onClick={()=>{setEditing(c.id);setEditText(c.body)}}>✎ <span>Düzenle</span></button>}
+          {c.can_delete&&<button type="button" className="comment-action-delete" disabled={working} onClick={()=>void remove(c.id)}>× <span>Sil</span></button>}
+        </div>}</>}
+      </div>
+    </article>)}
+    {loaded&&comments.length>2&&<button type="button" className="comment-show-more" onClick={()=>setShowAllComments(v=>!v)} aria-expanded={showAllComments}>
+      {showAllComments?'Daha az göster':`Önceki ${comments.length-2} yorumu göster`} <span aria-hidden="true">{showAllComments?'⌃':'⌄'}</span>
     </button>}
-    <button type="button" className="comment-toggle" onClick={()=>setShowComposer(v=>!v)} aria-expanded={showComposer}>
-      {showComposer?'Yorum yazmayı kapat':'+ Yorum ekle'}
-    </button>
-    {showComposer && <div className="item-comment-composer">
-      <textarea value={text} onChange={e=>setText(e.target.value)} maxLength={3000} rows={2} placeholder="Bu madde için yorum yaz..." aria-label="Yeni yorum"/>
-      <button type="button" className="comment-submit" disabled={working||!text.trim()} onClick={()=>void create()}>Yorumu kaydet</button>
+    {showComposer&&<div className="item-comment-composer">
+      <label htmlFor={`comment-new-${itemId}`}>Yeni yorum</label>
+      <textarea id={`comment-new-${itemId}`} value={text} onChange={e=>setText(e.target.value)} maxLength={3000} rows={3} placeholder="Bu kontrolle ilgili notunuzu yazın..."/>
+      <div className="comment-compose-footer"><span>{text.length}/3000</span><button type="button" className="comment-submit" disabled={working||!text.trim()} onClick={()=>void create()}>Yorumu kaydet</button></div>
     </div>}
-  </div>;
+  </section>;
 }

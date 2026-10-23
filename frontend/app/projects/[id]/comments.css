@@ -1,0 +1,45 @@
+/* V1.6 — Sadece proje kontrol maddelerindeki yorum görünümü. */
+@media screen {
+  .check-page .item-comments{box-sizing:border-box;width:100%;max-width:100%;margin:7px 0 0;padding:13px 15px 11px;border:1px solid #e9e7ea;border-radius:12px;background:#fcfcfd;color:#202535;box-shadow:none;overflow:hidden}
+  .check-page .item-comments-header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:0 0 5px;min-height:30px}
+  .check-page .item-comments-heading{display:flex;gap:8px;align-items:center;min-width:0;font-size:13px}
+  .check-page .item-comments-heading strong{font-weight:700;color:#22283a}
+  .check-page .comment-heading-symbol{display:grid;place-items:center;border-radius:8px;background:#f8e8eb;color:#a41e34;width:26px;height:26px;font-size:18px;line-height:1}
+  .check-page .item-comments-count{display:inline-flex;align-items:center;justify-content:center;min-width:21px;height:20px;padding:0 6px;border-radius:20px;background:#f1edf0;color:#625c66;font-weight:600;font-size:11px}
+  .check-page .comment-add-top{border:1px solid #edd4da;background:#fff;color:#981a32;border-radius:8px;min-height:33px;padding:6px 11px;font-size:12px;font-weight:650;cursor:pointer;white-space:nowrap}
+  .check-page .comment-add-top:hover{background:#fff3f5}
+  .check-page .item-comment{display:flex;align-items:flex-start;gap:10px;padding:12px 0;margin:0;border:0;border-bottom:1px solid #edecef;background:none;border-radius:0;box-shadow:none;min-width:0}
+  .check-page .item-comment:last-of-type{border-bottom:0}
+  .check-page .comment-avatar{display:grid;place-items:center;flex:0 0 31px;width:31px;height:31px;border-radius:50%;color:#9d2440;background:#f7e2e7;font-size:12px;font-weight:750}
+  .check-page .comment-content{min-width:0;flex:1}
+  .check-page .item-comment-meta{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 9px;margin:0 0 5px;font-size:12px;line-height:1.4}
+  .check-page .item-comment-meta strong{font-size:12px;color:#252334;font-weight:700}
+  .check-page .item-comment-meta time{font-size:11px;color:#83818b}
+  .check-page .comment-edited{display:block;font-size:10px;color:#817881;margin-bottom:5px}
+  .check-page .comment-body{font-size:12.5px;color:#363544;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+  .check-page .item-comment-actions{display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin:7px 0 0}
+  .check-page .item-comment-actions button{border:0;border-radius:6px;background:transparent;padding:4px 7px;color:#756e78;font-size:11px;font-weight:600;line-height:1.3;cursor:pointer;min-height:25px}
+  .check-page .item-comment-actions .comment-action-edit:hover{background:#f2eef1;color:#8b1730}
+  .check-page .item-comment-actions .comment-action-delete:hover{background:#fff0f0;color:#a4252b}
+  .check-page .comment-show-more{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;border:0;border-top:1px solid #edecef;padding:12px 8px 3px;background:transparent;color:#9b233b;font-size:12px;font-weight:650;cursor:pointer;min-height:37px}
+  .check-page .comment-show-more:hover{color:#711328}
+  .check-page .item-comment-composer{margin-top:12px;padding:12px;background:#fff;border:1px solid #eee2e5;border-radius:9px;box-sizing:border-box}
+  .check-page .item-comment-composer label{display:block;font-size:12px;font-weight:650;margin-bottom:7px;color:#3f3b42}
+  .check-page .item-comment-composer textarea,.check-page .comment-edit-pane textarea{display:block;width:100%;max-width:100%;box-sizing:border-box;min-height:72px;border:1px solid #dcd9df;border-radius:8px;padding:10px 11px;font:inherit;font-size:13px;line-height:1.5;resize:vertical;background:#fff;color:#222;outline:none}
+  .check-page .item-comment-composer textarea:focus,.check-page .comment-edit-pane textarea:focus{border-color:#a41e34;box-shadow:0 0 0 2px #a41e341a}
+  .check-page .comment-compose-footer{display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px}
+  .check-page .comment-compose-footer>span{font-size:11px;color:#89838a}
+  .check-page .comment-submit,.check-page .item-comment-actions .comment-save{border:0;background:#a41e34;color:white;border-radius:8px;padding:9px 13px;min-height:34px;font-size:12px;font-weight:650;cursor:pointer}
+  .check-page .comment-submit:disabled,.check-page .comment-save:disabled{opacity:.55;cursor:not-allowed}
+  .check-page .comment-feedback-error{font-size:12px;color:#a41e34;margin:8px 0}
+  .check-page .item-comments-empty{font-size:12px;color:#89818a;margin:11px 0 1px}
+  @media(max-width:640px){
+    .check-page .item-comments{padding:11px 12px;margin-top:3px;border-radius:10px}
+    .check-page .item-comment{gap:8px;padding:11px 0}
+    .check-page .comment-avatar{flex-basis:28px;width:28px;height:28px}
+    .check-page .item-comment-meta{gap:3px 6px}
+    .check-page .comment-add-top{padding:7px 8px;min-height:36px}
+    .check-page .comment-body{font-size:12px}
+  }
+}
+@media print{.check-page .item-comments{display:none!important}}
